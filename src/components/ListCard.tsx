@@ -1,7 +1,8 @@
-import { ShoppingList } from "@/lib/store";
+import type { ShoppingList } from "@/lib/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Trash2, ChevronRight } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Trash2, ChevronRight, MoreVertical, Copy, Pencil } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -9,12 +10,13 @@ import { fr } from "date-fns/locale";
 interface Props {
   list: ShoppingList;
   onDelete: (id: string) => void;
+  onDuplicate: (list: ShoppingList) => void;
 }
 
-export function ListCard({ list, onDelete }: Props) {
+export function ListCard({ list, onDelete, onDuplicate }: Props) {
   const navigate = useNavigate();
-  const checkedCount = list.items.filter((i) => i.checked).length;
-  const totalCount = list.items.length;
+  const checkedCount = list.shopping_items.filter((i) => i.checked).length;
+  const totalCount = list.shopping_items.length;
   const progress = totalCount > 0 ? (checkedCount / totalCount) * 100 : 0;
 
   return (
@@ -29,23 +31,30 @@ export function ListCard({ list, onDelete }: Props) {
             <div className="min-w-0">
               <h3 className="font-semibold text-base truncate">{list.name}</h3>
               <p className="text-sm text-muted-foreground">
-                {totalCount} article{totalCount !== 1 ? "s" : ""} · {format(new Date(list.updatedAt), "d MMM", { locale: fr })}
+                {totalCount} article{totalCount !== 1 ? "s" : ""} · {format(new Date(list.updated_at), "d MMM", { locale: fr })}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-destructive hover:text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(list.id);
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem onClick={() => navigate(`/list/${list.id}`)}>
+                  <Pencil className="h-4 w-4 mr-2" /> Modifier
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onDuplicate(list)}>
+                  <Copy className="h-4 w-4 mr-2" /> Dupliquer
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-destructive" onClick={() => onDelete(list.id)}>
+                  <Trash2 className="h-4 w-4 mr-2" /> Supprimer
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
         </div>
 
