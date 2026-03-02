@@ -1,112 +1,143 @@
-export interface ShoppingItem {
-  id: string;
-  name: string;
-  checked: boolean;
-  quantity: number;
-  category?: string;
-}
+import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 
-export interface ShoppingList {
-  id: string;
-  name: string;
-  emoji: string;
-  items: ShoppingItem[];
-  createdAt: string;
-  updatedAt: string;
-}
+export type ShoppingList = Tables<"shopping_lists"> & {
+  shopping_items: Tables<"shopping_items">[];
+};
 
-const STORAGE_KEY = "shopping-lists";
+export type ShoppingItem = Tables<"shopping_items">;
 
-const EMOJIS = ["🛒", "🥦", "🍎", "🧀", "🥖", "🍕", "🧃", "🏠", "🎉", "☕"];
+const EMOJIS = ["🛒", "🥦", "🍎", "🧀", "🥖", "🍕", "🧃", "🏠", "🎉", "☕", "🥩", "🍳", "🥗", "🍰"];
 
 export function getRandomEmoji(): string {
   return EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
 }
 
-export function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+export async function fetchLists(): Promise<ShoppingList[]> {
+  const { data, error } = await supabase
+    .from("shopping_lists")
+    .select("*, shopping_items(*)")
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return (data as ShoppingList[]) || [];
 }
 
-export function getLists(): ShoppingList[] {
-  const data = localStorage.getItem(STORAGE_KEY);
-  return data ? JSON.parse(data) : [];
+export async function fetchList(id: string): Promise<ShoppingList | null> {
+  const { data, error } = await supabase
+    .from("shopping_lists")
+    .select("*, shopping_items(*)")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as ShoppingList | null;
 }
 
-export function saveLists(lists: ShoppingList[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(lists));
+export async function createList(userId: string, name: string) {
+  const { data, error } = await supabase
+    .from("shopping_lists")
+    .insert({ user_id: userId, name, emoji: getRandomEmoji() })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
 }
 
-export function createList(name: string): ShoppingList {
-  const list: ShoppingList = {
-    id: generateId(),
-    name,
-    emoji: getRandomEmoji(),
-    items: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  const lists = getLists();
-  lists.push(list);
-  saveLists(lists);
-  return list;
+export async function updateListName(id: string, name: string) {
+  const { error } = await supabase
+    .from("shopping_lists")
+    .update({ name })
+    .eq("id", id);
+
+  if (error) throw error;
 }
 
-export function deleteList(id: string) {
-  const lists = getLists().filter((l) => l.id !== id);
-  saveLists(lists);
+export async function updateListEmoji(id: string, emoji: string) {
+  const { error } = await supabase
+    .from("shopping_lists")
+    .update({ emoji })
+    .eq("id", id);
+
+  if (error) throw error;
 }
 
-export function getList(id: string): ShoppingList | undefined {
-  return getLists().find((l) => l.id === id);
+export async function deleteList(id: string) {
+  const { error } = await supabase
+    .from("shopping_lists")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw error;
 }
 
-export function updateList(id: string, updates: Partial<ShoppingList>) {
-  const lists = getLists().map((l) =>
-    l.id === id ? { ...l, ...updates, updatedAt: new Date().toISOString() } : l
-  );
-  saveLists(lists);
+export async function duplicateList(userId: string, list: ShoppingList) {
+  const newList = await createList(userId, `${list.name} (copie)`);
+  if (list.shopping_items.length > 0) {
+    const items = list.shopping_items.map((item) => ({
+      list_id: newList.id,
+      user_id: userId,
+      name: item.name,
+      quantity: item.quantity,
+      category: item.category,
+      checked: false,
+    }));
+    const { error } = await supabase.from("shopping_items").insert(items);
+    if (error) throw error;
+  }
+  return newList;
 }
 
-export function addItem(listId: string, name: string, quantity = 1) {
-  const lists = getLists().map((l) => {
-    if (l.id === listId) {
-      return {
-        ...l,
-        items: [...l.items, { id: generateId(), name, checked: false, quantity }],
-        updatedAt: new Date().toISOString(),
-      };
-    }
-    return l;
-  });
-  saveLists(lists);
+export async function addItem(listId: string, userId: string, name: string, quantity = 1, category?: string) {
+  const { error } = await supabase
+    .from("shopping_items")
+    .insert({ list_id: listId, user_id: userId, name, quantity, category });
+
+  if (error) throw error;
 }
 
-export function toggleItem(listId: string, itemId: string) {
-  const lists = getLists().map((l) => {
-    if (l.id === listId) {
-      return {
-        ...l,
-        items: l.items.map((i) =>
-          i.id === itemId ? { ...i, checked: !i.checked } : i
-        ),
-        updatedAt: new Date().toISOString(),
-      };
-    }
-    return l;
-  });
-  saveLists(lists);
+export async function toggleItem(itemId: string) {
+  const { data: item } = await supabase
+    .from("shopping_items")
+    .select("checked")
+    .eq("id", itemId)
+    .single();
+
+  if (item) {
+    const { error } = await supabase
+      .from("shopping_items")
+      .update({ checked: !item.checked })
+      .eq("id", itemId);
+
+    if (error) throw error;
+  }
 }
 
-export function removeItem(listId: string, itemId: string) {
-  const lists = getLists().map((l) => {
-    if (l.id === listId) {
-      return {
-        ...l,
-        items: l.items.filter((i) => i.id !== itemId),
-        updatedAt: new Date().toISOString(),
-      };
-    }
-    return l;
-  });
-  saveLists(lists);
+export async function updateItemQuantity(itemId: string, quantity: number) {
+  const { error } = await supabase
+    .from("shopping_items")
+    .update({ quantity })
+    .eq("id", itemId);
+
+  if (error) throw error;
+}
+
+export async function removeItem(itemId: string) {
+  const { error } = await supabase
+    .from("shopping_items")
+    .delete()
+    .eq("id", itemId);
+
+  if (error) throw error;
+}
+
+export async function clearCheckedItems(listId: string) {
+  const { error } = await supabase
+    .from("shopping_items")
+    .delete()
+    .eq("list_id", listId)
+    .eq("checked", true);
+
+  if (error) throw error;
 }
