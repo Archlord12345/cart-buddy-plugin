@@ -13,9 +13,10 @@ interface Props {
   onDelete: (id: string) => void;
   onDuplicate: (list: ShoppingList) => void;
   isShared?: boolean;
+  ownerName?: string;
 }
 
-export function ListCard({ list, onDelete, onDuplicate, isShared }: Props) {
+export function ListCard({ list, onDelete, onDuplicate, isShared, ownerName }: Props) {
   const navigate = useNavigate();
   const checkedCount = list.shopping_items.filter((i) => i.checked).length;
   const totalCount = list.shopping_items.length;
@@ -33,6 +34,7 @@ export function ListCard({ list, onDelete, onDuplicate, isShared }: Props) {
             <div className="min-w-0">
               <h3 className="font-semibold text-base truncate">{list.name}</h3>
               <p className="text-sm text-muted-foreground">
+                {ownerName && <span className="font-medium">{ownerName} · </span>}
                 {totalCount} article{totalCount !== 1 ? "s" : ""} · {format(new Date(list.updated_at), "d MMM", { locale: fr })}
               </p>
             </div>

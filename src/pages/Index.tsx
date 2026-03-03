@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { fetchLists, fetchSharedLists, createList, deleteList, duplicateList, type ShoppingList } from "@/lib/store";
+import { supabase } from "@/integrations/supabase/client";
 import { CreateListDialog } from "@/components/CreateListDialog";
 import { ListCard } from "@/components/ListCard";
 import { UserMenu } from "@/components/UserMenu";
@@ -13,8 +14,8 @@ type SortOption = "recent" | "oldest" | "name" | "items";
 
 export default function Index() {
   const { user } = useAuth();
-  const [lists, setLists] = useState<ShoppingList[]>([]);
-  const [sharedLists, setSharedLists] = useState<ShoppingList[]>([]);
+  const [allLists, setAllLists] = useState<ShoppingList[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [sort, setSort] = useState<SortOption>("recent");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -22,10 +23,19 @@ export default function Index() {
   const refresh = async () => {
     try {
       const data = await fetchLists();
-      setLists(data);
-      if (user) {
-        const shared = await fetchSharedLists(user.id);
-        setSharedLists(shared);
+      setAllLists(data);
+      // Fetch profile display names for all unique user_ids
+      const userIds = [...new Set(data.map(l => l.user_id))];
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("user_id, display_name")
+          .in("user_id", userIds);
+        if (profilesData) {
+          const map: Record<string, string> = {};
+          profilesData.forEach(p => { map[p.user_id] = p.display_name || "Utilisateur"; });
+          setProfiles(map);
+        }
       }
     } catch {
       toast.error("Erreur lors du chargement");
@@ -68,7 +78,10 @@ export default function Index() {
     }
   };
 
-  const filtered = useMemo(() => {
+  const myLists = allLists.filter(l => l.user_id === user?.id);
+  const otherLists = allLists.filter(l => l.user_id !== user?.id);
+
+  const applySort = (lists: ShoppingList[]) => {
     let result = [...lists];
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -81,11 +94,14 @@ export default function Index() {
       case "items": return result.sort((a, b) => b.shopping_items.length - a.shopping_items.length);
       default: return result;
     }
-  }, [lists, sort, search]);
+  };
+
+  const filteredMine = useMemo(() => applySort(myLists), [myLists, sort, search]);
+  const filteredOthers = useMemo(() => applySort(otherLists), [otherLists, sort, search]);
 
   // Stats
-  const totalItems = lists.reduce((sum, l) => sum + l.shopping_items.length, 0);
-  const checkedItems = lists.reduce((sum, l) => sum + l.shopping_items.filter((i) => i.checked).length, 0);
+  const totalItems = allLists.reduce((sum, l) => sum + l.shopping_items.length, 0);
+  const checkedItems = allLists.reduce((sum, l) => sum + l.shopping_items.filter((i) => i.checked).length, 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -103,11 +119,11 @@ export default function Index() {
         </p>
 
         {/* Stats */}
-        {lists.length > 0 && (
+        {allLists.length > 0 && (
           <div className="grid grid-cols-3 gap-3 mb-6">
             <div className="glass-card rounded-xl p-3 text-center">
-              <p className="text-2xl font-serif font-bold text-primary">{lists.length}</p>
-              <p className="text-xs text-muted-foreground">Liste{lists.length !== 1 ? "s" : ""}</p>
+              <p className="text-2xl font-serif font-bold text-primary">{allLists.length}</p>
+              <p className="text-xs text-muted-foreground">Liste{allLists.length !== 1 ? "s" : ""}</p>
             </div>
             <div className="glass-card rounded-xl p-3 text-center">
               <p className="text-2xl font-serif font-bold text-accent">{totalItems}</p>
@@ -124,7 +140,7 @@ export default function Index() {
         <div className="flex items-center gap-3 mb-6">
           <CreateListDialog onCreateList={handleCreate} />
           <div className="flex-1" />
-          {lists.length > 1 && (
+          {allLists.length > 1 && (
             <>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -151,39 +167,49 @@ export default function Index() {
           )}
         </div>
 
-        {/* Lists */}
+        {/* My Lists */}
         {loading ? (
           <div className="flex justify-center py-20">
             <div className="animate-pulse text-muted-foreground">Chargement...</div>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-            <ShoppingBasket className="h-16 w-16 mb-4 opacity-30" />
-            <p className="text-lg font-medium">{search ? "Aucun résultat" : "Aucune liste"}</p>
-            <p className="text-sm">{search ? "Essayez un autre terme" : "Créez votre première liste de courses !"}</p>
-          </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {filtered.map((list) => (
-              <ListCard key={list.id} list={list} onDelete={handleDelete} onDuplicate={handleDuplicate} />
-            ))}
-          </div>
-        )}
-
-        {/* Shared lists */}
-        {sharedLists.length > 0 && (
           <>
-            <div className="mt-10 mb-4">
-              <h2 className="text-xl font-serif font-semibold flex items-center gap-2">
-                <Share2 className="h-5 w-5 text-primary" />
-                Partagées avec moi
-              </h2>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {sharedLists.map((list) => (
-                <ListCard key={list.id} list={list} onDelete={() => {}} onDuplicate={() => {}} isShared />
-              ))}
-            </div>
+            <h2 className="text-lg font-serif font-semibold mb-3">📋 Mes listes</h2>
+            {filteredMine.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <ShoppingBasket className="h-12 w-12 mb-3 opacity-30" />
+                <p className="text-base font-medium">{search ? "Aucun résultat" : "Aucune liste"}</p>
+                <p className="text-sm">{search ? "Essayez un autre terme" : "Créez votre première liste !"}</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {filteredMine.map((list) => (
+                  <ListCard key={list.id} list={list} onDelete={handleDelete} onDuplicate={handleDuplicate} />
+                ))}
+              </div>
+            )}
+
+            {/* Other users' lists */}
+            {filteredOthers.length > 0 && (
+              <>
+                <h2 className="text-lg font-serif font-semibold mt-10 mb-3 flex items-center gap-2">
+                  <Share2 className="h-5 w-5 text-primary" />
+                  Toutes les listes
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {filteredOthers.map((list) => (
+                    <ListCard
+                      key={list.id}
+                      list={list}
+                      onDelete={() => {}}
+                      onDuplicate={() => {}}
+                      isShared
+                      ownerName={profiles[list.user_id] || "Utilisateur"}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

@@ -23,6 +23,16 @@ export async function fetchLists(): Promise<ShoppingList[]> {
   return (data as ShoppingList[]) || [];
 }
 
+export async function fetchAllLists(): Promise<ShoppingList[]> {
+  const { data, error } = await supabase
+    .from("shopping_lists")
+    .select("*, shopping_items(*)")
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return (data as ShoppingList[]) || [];
+}
+
 export async function fetchSharedLists(userId: string): Promise<ShoppingList[]> {
   // Get list IDs shared with this user
   const { data: shares, error: sharesError } = await supabase
