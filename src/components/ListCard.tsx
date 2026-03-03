@@ -1,6 +1,7 @@
 import type { ShoppingList } from "@/lib/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Trash2, ChevronRight, MoreVertical, Copy, Pencil } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -11,9 +12,10 @@ interface Props {
   list: ShoppingList;
   onDelete: (id: string) => void;
   onDuplicate: (list: ShoppingList) => void;
+  isShared?: boolean;
 }
 
-export function ListCard({ list, onDelete, onDuplicate }: Props) {
+export function ListCard({ list, onDelete, onDuplicate, isShared }: Props) {
   const navigate = useNavigate();
   const checkedCount = list.shopping_items.filter((i) => i.checked).length;
   const totalCount = list.shopping_items.length;
@@ -36,24 +38,28 @@ export function ListCard({ list, onDelete, onDuplicate }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                <DropdownMenuItem onClick={() => navigate(`/list/${list.id}`)}>
-                  <Pencil className="h-4 w-4 mr-2" /> Modifier
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onDuplicate(list)}>
-                  <Copy className="h-4 w-4 mr-2" /> Dupliquer
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive" onClick={() => onDelete(list.id)}>
-                  <Trash2 className="h-4 w-4 mr-2" /> Supprimer
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {isShared ? (
+              <Badge variant="secondary" className="text-xs">Partagée</Badge>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem onClick={() => navigate(`/list/${list.id}`)}>
+                    <Pencil className="h-4 w-4 mr-2" /> Modifier
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onDuplicate(list)}>
+                    <Copy className="h-4 w-4 mr-2" /> Dupliquer
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-destructive" onClick={() => onDelete(list.id)}>
+                    <Trash2 className="h-4 w-4 mr-2" /> Supprimer
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
         </div>

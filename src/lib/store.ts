@@ -23,6 +23,49 @@ export async function fetchLists(): Promise<ShoppingList[]> {
   return (data as ShoppingList[]) || [];
 }
 
+export async function fetchSharedLists(userId: string): Promise<ShoppingList[]> {
+  // Get list IDs shared with this user
+  const { data: shares, error: sharesError } = await supabase
+    .from("list_shares")
+    .select("list_id, permission")
+    .eq("shared_with_user_id", userId);
+
+  if (sharesError) throw sharesError;
+  if (!shares || shares.length === 0) return [];
+
+  const listIds = shares.map(s => s.list_id);
+  const { data, error } = await supabase
+    .from("shopping_lists")
+    .select("*, shopping_items(*)")
+    .in("id", listIds)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return (data as ShoppingList[]) || [];
+}
+
+export async function getListPermission(userId: string, listId: string): Promise<"owner" | "edit" | "view" | null> {
+  // Check if owner
+  const { data: list } = await supabase
+    .from("shopping_lists")
+    .select("user_id")
+    .eq("id", listId)
+    .maybeSingle();
+
+  if (list?.user_id === userId) return "owner";
+
+  // Check shares
+  const { data: share } = await supabase
+    .from("list_shares")
+    .select("permission")
+    .eq("list_id", listId)
+    .eq("shared_with_user_id", userId)
+    .maybeSingle();
+
+  if (share) return share.permission as "edit" | "view";
+  return null;
+}
+
 export async function fetchList(id: string): Promise<ShoppingList | null> {
   const { data, error } = await supabase
     .from("shopping_lists")
