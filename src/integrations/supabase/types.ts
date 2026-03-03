@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      list_shares: {
+        Row: {
+          created_at: string
+          id: string
+          list_id: string
+          permission: string
+          shared_by: string
+          shared_with_email: string
+          shared_with_user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          list_id: string
+          permission?: string
+          shared_by: string
+          shared_with_email: string
+          shared_with_user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          list_id?: string
+          permission?: string
+          shared_by?: string
+          shared_with_email?: string
+          shared_with_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "list_shares_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "shopping_lists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -114,7 +152,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      can_edit_list: {
+        Args: { _list_id: string; _user_id: string }
+        Returns: boolean
+      }
+      has_list_access: {
+        Args: { _list_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { fetchLists, createList, deleteList, duplicateList, type ShoppingList } from "@/lib/store";
+import { fetchLists, fetchSharedLists, createList, deleteList, duplicateList, type ShoppingList } from "@/lib/store";
 import { CreateListDialog } from "@/components/CreateListDialog";
 import { ListCard } from "@/components/ListCard";
 import { UserMenu } from "@/components/UserMenu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ShoppingBasket, Search, BarChart3 } from "lucide-react";
+import { ShoppingBasket, Search, BarChart3, Share2 } from "lucide-react";
 import { toast } from "sonner";
 
 type SortOption = "recent" | "oldest" | "name" | "items";
@@ -14,6 +14,7 @@ type SortOption = "recent" | "oldest" | "name" | "items";
 export default function Index() {
   const { user } = useAuth();
   const [lists, setLists] = useState<ShoppingList[]>([]);
+  const [sharedLists, setSharedLists] = useState<ShoppingList[]>([]);
   const [sort, setSort] = useState<SortOption>("recent");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -22,6 +23,10 @@ export default function Index() {
     try {
       const data = await fetchLists();
       setLists(data);
+      if (user) {
+        const shared = await fetchSharedLists(user.id);
+        setSharedLists(shared);
+      }
     } catch {
       toast.error("Erreur lors du chargement");
     } finally {
@@ -163,6 +168,23 @@ export default function Index() {
               <ListCard key={list.id} list={list} onDelete={handleDelete} onDuplicate={handleDuplicate} />
             ))}
           </div>
+        )}
+
+        {/* Shared lists */}
+        {sharedLists.length > 0 && (
+          <>
+            <div className="mt-10 mb-4">
+              <h2 className="text-xl font-serif font-semibold flex items-center gap-2">
+                <Share2 className="h-5 w-5 text-primary" />
+                Partagées avec moi
+              </h2>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {sharedLists.map((list) => (
+                <ListCard key={list.id} list={list} onDelete={() => {}} onDuplicate={() => {}} isShared />
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

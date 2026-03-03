@@ -3,11 +3,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import {
   fetchList, addItem, toggleItem, removeItem, clearCheckedItems,
-  updateListName, updateItemQuantity, type ShoppingList
+  updateListName, updateItemQuantity, getListPermission, type ShoppingList
 } from "@/lib/store";
+import { ShareListDialog } from "@/components/ShareListDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Plus, Trash2, ShoppingCart, CheckCheck, Pencil, Minus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -20,19 +22,22 @@ export default function ListDetail() {
   const [loading, setLoading] = useState(true);
   const [editingName, setEditingName] = useState(false);
   const [listName, setListName] = useState("");
+  const [permission, setPermission] = useState<"owner" | "edit" | "view" | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!id) return;
+    if (!id || !user) return;
     try {
       const data = await fetchList(id);
       setList(data);
       if (data) setListName(data.name);
+      const perm = await getListPermission(user.id, id);
+      setPermission(perm);
     } catch {
       toast.error("Erreur lors du chargement");
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, user]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -94,6 +99,8 @@ export default function ListDetail() {
     refresh();
   };
 
+  const canEdit = permission === "owner" || permission === "edit";
+  const isOwner = permission === "owner";
   const unchecked = list.shopping_items.filter((i) => !i.checked);
   const checked = list.shopping_items.filter((i) => i.checked);
 
@@ -106,7 +113,7 @@ export default function ListDetail() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <span className="text-2xl">{list.emoji}</span>
-          {editingName ? (
+          {editingName && isOwner ? (
             <form onSubmit={(e) => { e.preventDefault(); handleSaveName(); }} className="flex gap-2 flex-1">
               <Input value={listName} onChange={(e) => setListName(e.target.value)} autoFocus className="flex-1 rounded-xl" />
               <Button type="submit" size="sm">OK</Button>
@@ -114,11 +121,19 @@ export default function ListDetail() {
           ) : (
             <div className="flex items-center gap-2 min-w-0 flex-1">
               <h1 className="text-2xl font-serif font-semibold truncate">{list.name}</h1>
-              <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => setEditingName(true)}>
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
+              {isOwner && (
+                <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => setEditingName(true)}>
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              )}
+              {!isOwner && (
+                <Badge variant="secondary" className="text-xs flex-shrink-0">
+                  {permission === "edit" ? "Édition" : "Lecture"}
+                </Badge>
+              )}
             </div>
           )}
+          {isOwner && <ShareListDialog listId={list.id} listName={list.name} />}
         </div>
 
         {/* Stats bar */}
@@ -127,7 +142,7 @@ export default function ListDetail() {
             <p className="text-sm text-muted-foreground">
               {checked.length}/{list.shopping_items.length} complété{checked.length !== 1 ? "s" : ""}
             </p>
-            {checked.length > 0 && (
+            {checked.length > 0 && canEdit && (
               <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground" onClick={handleClearChecked}>
                 <CheckCheck className="h-3.5 w-3.5" />
                 Supprimer complétés
@@ -136,18 +151,20 @@ export default function ListDetail() {
           </div>
         )}
 
-        {/* Add item form */}
-        <form onSubmit={handleAddItem} className="flex gap-2 mb-6">
-          <Input
-            placeholder="Ajouter un article..."
-            value={newItem}
-            onChange={(e) => setNewItem(e.target.value)}
-            className="flex-1 rounded-xl"
-          />
-          <Button type="submit" disabled={!newItem.trim()} size="icon" className="rounded-xl flex-shrink-0">
-            <Plus className="h-5 w-5" />
-          </Button>
-        </form>
+        {/* Add item form - only for edit/owner */}
+        {canEdit && (
+          <form onSubmit={handleAddItem} className="flex gap-2 mb-6">
+            <Input
+              placeholder="Ajouter un article..."
+              value={newItem}
+              onChange={(e) => setNewItem(e.target.value)}
+              className="flex-1 rounded-xl"
+            />
+            <Button type="submit" disabled={!newItem.trim()} size="icon" className="rounded-xl flex-shrink-0">
+              <Plus className="h-5 w-5" />
+            </Button>
+          </form>
+        )}
 
         {/* Items */}
         {list.shopping_items.length === 0 ? (
@@ -160,20 +177,25 @@ export default function ListDetail() {
           <div className="space-y-1">
             {unchecked.map((item) => (
               <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors group">
-                <Checkbox checked={false} onCheckedChange={() => handleToggle(item.id)} className="h-5 w-5" />
+                <Checkbox checked={false} onCheckedChange={() => canEdit && handleToggle(item.id)} className="h-5 w-5" disabled={!canEdit} />
                 <span className="flex-1 text-sm">{item.name}</span>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleQuantityChange(item.id, -1, item.quantity)}>
-                    <Minus className="h-3 w-3" />
+                {canEdit && (
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleQuantityChange(item.id, -1, item.quantity)}>
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <span className="text-xs w-5 text-center font-medium">{item.quantity}</span>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleQuantityChange(item.id, 1, item.quantity)}>
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
+                {!canEdit && <span className="text-xs text-muted-foreground">×{item.quantity}</span>}
+                {canEdit && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive" onClick={() => handleRemove(item.id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
-                  <span className="text-xs w-5 text-center font-medium">{item.quantity}</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleQuantityChange(item.id, 1, item.quantity)}>
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </div>
-                <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive" onClick={() => handleRemove(item.id)}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                )}
               </div>
             ))}
 
@@ -186,11 +208,13 @@ export default function ListDetail() {
                 </div>
                 {checked.map((item) => (
                   <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors group opacity-60">
-                    <Checkbox checked={true} onCheckedChange={() => handleToggle(item.id)} className="h-5 w-5" />
+                    <Checkbox checked={true} onCheckedChange={() => canEdit && handleToggle(item.id)} className="h-5 w-5" disabled={!canEdit} />
                     <span className="flex-1 text-sm line-through">{item.name}</span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive" onClick={() => handleRemove(item.id)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    {canEdit && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive" onClick={() => handleRemove(item.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 ))}
               </>
